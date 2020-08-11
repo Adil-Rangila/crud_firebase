@@ -26,13 +26,13 @@ class _HomePageState extends State<HomePage> {
   final db = Firestore.instance;
   String task;
 
-  void showPopUp() {
+  void showPopUp(bool isUpdate, DocumentSnapshot ds) {
     final _fromKey = GlobalKey<FormState>();
     showDialog(
         context: context,
         builder: (context) {
           return AlertDialog(
-            title: Text('Add Todo'),
+            title: isUpdate ? Text('Update Todo') : Text('Add Todo'),
             content: Form(
               key: _fromKey,
               child: TextFormField(
@@ -56,7 +56,17 @@ class _HomePageState extends State<HomePage> {
             actions: <Widget>[
               RaisedButton(
                 onPressed: () {
-                  db.collection('tasks').add({'name': task});
+                  if (isUpdate) {
+                    db
+                        .collection('tasks')
+                        .document(ds.documentID)
+                        .updateData({'name': task});
+                  } else {
+                    db
+                        .collection('tasks')
+                        .add({'name': task, 'time': DateTime.now()});
+                  }
+                  Navigator.pop(context);
                 },
                 child: Text('Submit'),
               )
@@ -69,14 +79,39 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton(
-        onPressed: showPopUp,
+        onPressed: () => showPopUp(false, null),
         child: Icon(Icons.add),
       ),
       appBar: AppBar(
         title: Text('Working'),
       ),
       body: Container(
-        child: Text('Working'),
+        //through this i am receivng value from database thanks to stream builder and snapshot
+        child: StreamBuilder<QuerySnapshot>(
+          stream: db.collection('tasks').orderBy('time').snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.hasData) {
+              return ListView.builder(
+                  itemCount: snapshot.data.documents.length,
+                  itemBuilder: (context, index) {
+                    DocumentSnapshot ds = snapshot.data.documents[index];
+                    return ListTile(
+                      title: Text(ds['name']),
+                      onLongPress: () {
+                        //this will delete the feild in tha could firestore...
+                        db.collection('tasks').document(ds.documentID).delete();
+                      },
+                      onTap: () {
+                        //this part is use for updating data in firebase.
+                        showPopUp(true, ds);
+                      },
+                    );
+                  });
+            } else {
+              return CircularProgressIndicator();
+            }
+          },
+        ),
       ),
     );
   }
